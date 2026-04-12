@@ -1,7 +1,7 @@
 {
-    "name": "reader-highlighter-tags",
-    "version": "1.0.2",
-    "description": "Highlight text in Reading View",
+    "name": "reader-annotator",
+    "version": "2.0.0",
+    "description": "Highlight, underline, and annotate text in Reading View",
     "main": "main.js",
     "scripts": {
         "dev": "node esbuild.config.mjs",

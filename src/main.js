@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
     showTagButton: true,
     showRemoveButton: true,
     showQuoteButton: true,
+    showUnderlineButton: true,
 
     // NEW: Color Palette (optional, disabled by default = use == highlight)
     enableColorPalette: false,
@@ -186,10 +187,36 @@ export default class ReadingHighlighterPlugin extends Plugin {
             },
         });
 
+        // Underline selection
+        this.addCommand({
+            id: "underline-selection-reading",
+            name: "Underline selection (Reading View)",
+            checkCallback: (checking) => {
+                const view = this.getActiveReadingView();
+                if (!view) return false;
+                if (checking) return true;
+                this.underlineSelection(view);
+                return true;
+            },
+        });
+
+        // Remove underline
+        this.addCommand({
+            id: "remove-underline",
+            name: "Remove underline from selection (Reading View)",
+            checkCallback: (checking) => {
+                const view = this.getActiveReadingView();
+                if (!view) return false;
+                if (checking) return true;
+                this.removeUnderlineSelection(view);
+                return true;
+            },
+        });
+
         // Undo last highlight
         this.addCommand({
             id: "undo-last-highlight",
-            name: "Undo last highlight",
+            name: "Undo last modification",
             callback: () => {
                 this.undoLastHighlight();
             },
@@ -559,6 +586,67 @@ export default class ReadingHighlighterPlugin extends Plugin {
         sel?.removeAllRanges();
     }
 
+    // Underline selection
+    async underlineSelection(view, selectionSnapshot) {
+        const sel = window.getSelection();
+        const snippet = selectionSnapshot?.text || sel?.toString() || "";
+        if (!snippet.trim()) {
+            new Notice("No text selected.");
+            return;
+        }
+
+        const scrollPos = getScroll(view);
+        await this.saveUndoState(view.file);
+
+        const contextEl = this.getSelectionContext();
+        const contextText = contextEl ? contextEl.innerText : null;
+        const occurrenceIndex = this.getSelectionOccurrence(view, contextEl);
+
+        const result = await this.logic.locateSelection(view.file, view, snippet, contextText, occurrenceIndex);
+        if (!result) {
+            new Notice("Could not locate selection in file.");
+            return;
+        }
+
+        await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "underline");
+        this.restoreScroll(view, scrollPos);
+        sel?.removeAllRanges();
+
+        if (this.settings.enableHaptics && Platform.isMobile) {
+            navigator.vibrate?.(10);
+        }
+
+        new Notice("Underlined!");
+    }
+
+    // Remove underline from selection
+    async removeUnderlineSelection(view, selectionSnapshot) {
+        const sel = window.getSelection();
+        const snippet = selectionSnapshot?.text || sel?.toString() || "";
+        if (!snippet.trim()) {
+            new Notice("Select underlined text to remove.");
+            return;
+        }
+
+        const scrollPos = getScroll(view);
+        await this.saveUndoState(view.file);
+
+        const contextEl = this.getSelectionContext();
+        const contextText = contextEl ? contextEl.innerText : null;
+        const occurrenceIndex = this.getSelectionOccurrence(view, contextEl);
+
+        const result = await this.logic.locateSelection(view.file, view, snippet, contextText, occurrenceIndex);
+        if (!result) {
+            new Notice("Could not locate selection in file.");
+            return;
+        }
+
+        await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "remove-underline");
+        new Notice("Underline removed.");
+        this.restoreScroll(view, scrollPos);
+        sel?.removeAllRanges();
+    }
+
     // Remove all highlights from file
     async removeAllHighlights(view) {
         // Save for undo
@@ -572,8 +660,11 @@ export default class ReadingHighlighterPlugin extends Plugin {
         // Remove HTML highlights
         raw = raw.replace(/<mark[^>]*>(.*?)<\/mark>/g, "$1");
 
+        // Remove underlines
+        raw = raw.replace(/<u>(.*?)<\/u>/g, "$1");
+
         await this.app.vault.modify(view.file, raw);
-        new Notice("All highlights removed.");
+        new Notice("All annotations removed.");
     }
 
     // Export highlights to new MD file
@@ -693,7 +784,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
             expanded = false;
 
             const preceding = raw.substring(0, expandedStart);
-            const matchBack = preceding.match(/(<mark[^>]*>|\*\*|==|~~|\*|_|\[\[|\[)$/);
+            const matchBack = preceding.match(/(<mark[^>]*>|<u>|\*\*|==|~~|\*|_|\[\[|\[)$/);
 
             if (matchBack) {
                 expandedStart -= matchBack[0].length;
@@ -701,7 +792,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
             }
 
             const following = raw.substring(expandedEnd);
-            const matchForward = following.match(/^(<\/mark>|\*\*|==|~~|\*|_|\]\]|\]\([^)]+\))/);
+            const matchForward = following.match(/^(<\/mark>|<\/u>|\*\*|==|~~|\*|_|\]\]|\]\([^)]+\))/);
 
             if (matchForward) {
                 expandedEnd += matchForward[0].length;
@@ -748,6 +839,11 @@ export default class ReadingHighlighterPlugin extends Plugin {
 
                 if (mode === "highlight" || mode === "color" || mode === "tag") {
                     cleanLine = cleanLine.split('==').join('');
+                } else if (mode === "underline") {
+                    // Strip existing underline tags only, preserve highlights
+                    cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+                } else if (mode === "remove-underline") {
+                    cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
                 } else if (mode === "bold") {
                     cleanLine = cleanLine.split('**').join('');
                 } else if (mode === "italic") {
@@ -756,7 +852,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
                     cleanLine = cleanLine.split('==').join('');
                 }
 
-                if (mode === "remove") {
+                if (mode === "remove" || mode === "remove-underline") {
                     return cleanLine;
                 }
 
@@ -786,6 +882,8 @@ export default class ReadingHighlighterPlugin extends Plugin {
                     }
                 } else if (mode === "color") {
                     wrappedContent = `<mark style="background: ${payload}; color: black;">${content}</mark>`;
+                } else if (mode === "underline") {
+                    wrappedContent = `<u>${content}</u>`;
                 }
 
                 return `${indent}${prefix}${tagStr}${wrappedContent}`;

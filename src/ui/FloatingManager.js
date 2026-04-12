@@ -6,6 +6,7 @@ export class FloatingManager {
         this.app = plugin.app;
         this.containerEl = null;
         this.highlightBtn = null;
+        this.underlineBtn = null;
         this.tagBtn = null;
         this.removeBtn = null;
         this.quoteBtn = null;
@@ -95,6 +96,12 @@ export class FloatingManager {
             this.containerEl.appendChild(this.quoteBtn);
         }
 
+        // Underline button
+        if (this.plugin.settings.showUnderlineButton) {
+            this.underlineBtn = this.createButton("underline", "Underline selection");
+            this.containerEl.appendChild(this.underlineBtn);
+        }
+
         // Annotation button
         if (this.plugin.settings.enableAnnotations && this.plugin.settings.showAnnotationButton) {
             this.annotateBtn = this.createButton("message-square", "Add annotation");
@@ -148,6 +155,7 @@ export class FloatingManager {
 
         // Main actions
         attachAction(this.highlightBtn, "highlightSelection");
+        attachAction(this.underlineBtn, "underlineSelection");
         attachAction(this.tagBtn, "tagSelection");
         attachAction(this.quoteBtn, "copyAsQuote");
         attachAction(this.annotateBtn, "annotateSelection");

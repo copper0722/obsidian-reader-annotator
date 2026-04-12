@@ -13,6 +13,9 @@ export async function exportHighlightsToMD(app, file) {
     // Pattern for <mark>text</mark> (HTML highlights)
     const htmlPattern = /<mark[^>]*>(.*?)<\/mark>/gs;
 
+    // Pattern for <u>text</u> (underlines)
+    const underlinePattern = /<u>(.*?)<\/u>/gs;
+
     // Extract markdown highlights
     let match;
     while ((match = markdownPattern.exec(raw)) !== null) {
@@ -28,6 +31,15 @@ export async function exportHighlightsToMD(app, file) {
         highlights.push({
             text: match[1].trim(),
             type: "html",
+            position: match.index
+        });
+    }
+
+    // Extract underlines
+    while ((match = underlinePattern.exec(raw)) !== null) {
+        highlights.push({
+            text: match[1].trim(),
+            type: "underline",
             position: match.index
         });
     }
@@ -122,6 +134,21 @@ export function getHighlightsFromContent(raw) {
             position: match.index,
             context: context,
             color: color
+        });
+    }
+
+    // Extract underlines
+    const underlinePattern = /<u>(.*?)<\/u>/gs;
+    while ((match = underlinePattern.exec(raw)) !== null) {
+        const lineStart = raw.lastIndexOf("\n", match.index) + 1;
+        const lineEnd = raw.indexOf("\n", match.index + match[0].length);
+        const context = raw.substring(lineStart, lineEnd === -1 ? undefined : lineEnd).trim();
+
+        highlights.push({
+            text: match[1].trim(),
+            type: "underline",
+            position: match.index,
+            context: context
         });
     }
 

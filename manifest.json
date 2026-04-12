@@ -1,10 +1,10 @@
 {
-	"id": "reader-highlighter-tags",
-	"name": "Reader Highlighter Tags",
-	"version": "1.0.2",
+	"id": "reader-annotator",
+	"name": "Reader Annotator",
+	"version": "2.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Highlight text and add tags in Reading View.",
-	"author": "DuckTapeKiller",
-	"authorUrl": "https://github.com/DuckTapeKiller",
+	"description": "Highlight, underline, and annotate text in Reading View.",
+	"author": "copper0722",
+	"authorUrl": "https://github.com/copper0722",
 	"isDesktopOnly": false
 }

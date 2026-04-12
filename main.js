@@ -35,6 +35,7 @@ async function exportHighlightsToMD(app, file) {
   const highlights = [];
   const markdownPattern = /==(.*?)==/gs;
   const htmlPattern = /<mark[^>]*>(.*?)<\/mark>/gs;
+  const underlinePattern = /<u>(.*?)<\/u>/gs;
   let match;
   while ((match = markdownPattern.exec(raw)) !== null) {
     highlights.push({
@@ -47,6 +48,13 @@ async function exportHighlightsToMD(app, file) {
     highlights.push({
       text: match[1].trim(),
       type: "html",
+      position: match.index
+    });
+  }
+  while ((match = underlinePattern.exec(raw)) !== null) {
+    highlights.push({
+      text: match[1].trim(),
+      type: "underline",
       position: match.index
     });
   }
@@ -108,6 +116,18 @@ function getHighlightsFromContent(raw) {
       color
     });
   }
+  const underlinePattern = /<u>(.*?)<\/u>/gs;
+  while ((match = underlinePattern.exec(raw)) !== null) {
+    const lineStart = raw.lastIndexOf("\n", match.index) + 1;
+    const lineEnd = raw.indexOf("\n", match.index + match[0].length);
+    const context = raw.substring(lineStart, lineEnd === -1 ? void 0 : lineEnd).trim();
+    highlights.push({
+      text: match[1].trim(),
+      type: "underline",
+      position: match.index,
+      context
+    });
+  }
   highlights.sort((a, b) => a.position - b.position);
   return highlights;
 }
@@ -132,6 +152,7 @@ var FloatingManager = class {
     this.app = plugin.app;
     this.containerEl = null;
     this.highlightBtn = null;
+    this.underlineBtn = null;
     this.tagBtn = null;
     this.removeBtn = null;
     this.quoteBtn = null;
@@ -199,6 +220,10 @@ var FloatingManager = class {
       this.quoteBtn = this.createButton("quote", "Copy as quote");
       this.containerEl.appendChild(this.quoteBtn);
     }
+    if (this.plugin.settings.showUnderlineButton) {
+      this.underlineBtn = this.createButton("underline", "Underline selection");
+      this.containerEl.appendChild(this.underlineBtn);
+    }
     if (this.plugin.settings.enableAnnotations && this.plugin.settings.showAnnotationButton) {
       this.annotateBtn = this.createButton("message-square", "Add annotation");
       this.containerEl.appendChild(this.annotateBtn);
@@ -239,6 +264,7 @@ var FloatingManager = class {
       btn.addEventListener("touchstart", handler, { passive: false });
     };
     attachAction(this.highlightBtn, "highlightSelection");
+    attachAction(this.underlineBtn, "underlineSelection");
     attachAction(this.tagBtn, "tagSelection");
     attachAction(this.quoteBtn, "copyAsQuote");
     attachAction(this.annotateBtn, "annotateSelection");
@@ -1039,6 +1065,7 @@ var DEFAULT_SETTINGS = {
   showTagButton: true,
   showRemoveButton: true,
   showQuoteButton: true,
+  showUnderlineButton: true,
   // NEW: Color Palette (optional, disabled by default = use == highlight)
   enableColorPalette: false,
   colorPalette: [
@@ -1181,8 +1208,34 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
       }
     });
     this.addCommand({
+      id: "underline-selection-reading",
+      name: "Underline selection (Reading View)",
+      checkCallback: (checking) => {
+        const view = this.getActiveReadingView();
+        if (!view)
+          return false;
+        if (checking)
+          return true;
+        this.underlineSelection(view);
+        return true;
+      }
+    });
+    this.addCommand({
+      id: "remove-underline",
+      name: "Remove underline from selection (Reading View)",
+      checkCallback: (checking) => {
+        const view = this.getActiveReadingView();
+        if (!view)
+          return false;
+        if (checking)
+          return true;
+        this.removeUnderlineSelection(view);
+        return true;
+      }
+    });
+    this.addCommand({
       id: "undo-last-highlight",
-      name: "Undo last highlight",
+      name: "Undo last modification",
       callback: () => {
         this.undoLastHighlight();
       }
@@ -1482,14 +1535,65 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
     this.restoreScroll(view, scrollPos);
     sel == null ? void 0 : sel.removeAllRanges();
   }
+  // Underline selection
+  async underlineSelection(view, selectionSnapshot) {
+    var _a;
+    const sel = window.getSelection();
+    const snippet = (selectionSnapshot == null ? void 0 : selectionSnapshot.text) || (sel == null ? void 0 : sel.toString()) || "";
+    if (!snippet.trim()) {
+      new import_obsidian5.Notice("No text selected.");
+      return;
+    }
+    const scrollPos = getScroll(view);
+    await this.saveUndoState(view.file);
+    const contextEl = this.getSelectionContext();
+    const contextText = contextEl ? contextEl.innerText : null;
+    const occurrenceIndex = this.getSelectionOccurrence(view, contextEl);
+    const result = await this.logic.locateSelection(view.file, view, snippet, contextText, occurrenceIndex);
+    if (!result) {
+      new import_obsidian5.Notice("Could not locate selection in file.");
+      return;
+    }
+    await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "underline");
+    this.restoreScroll(view, scrollPos);
+    sel == null ? void 0 : sel.removeAllRanges();
+    if (this.settings.enableHaptics && import_obsidian5.Platform.isMobile) {
+      (_a = navigator.vibrate) == null ? void 0 : _a.call(navigator, 10);
+    }
+    new import_obsidian5.Notice("Underlined!");
+  }
+  // Remove underline from selection
+  async removeUnderlineSelection(view, selectionSnapshot) {
+    const sel = window.getSelection();
+    const snippet = (selectionSnapshot == null ? void 0 : selectionSnapshot.text) || (sel == null ? void 0 : sel.toString()) || "";
+    if (!snippet.trim()) {
+      new import_obsidian5.Notice("Select underlined text to remove.");
+      return;
+    }
+    const scrollPos = getScroll(view);
+    await this.saveUndoState(view.file);
+    const contextEl = this.getSelectionContext();
+    const contextText = contextEl ? contextEl.innerText : null;
+    const occurrenceIndex = this.getSelectionOccurrence(view, contextEl);
+    const result = await this.logic.locateSelection(view.file, view, snippet, contextText, occurrenceIndex);
+    if (!result) {
+      new import_obsidian5.Notice("Could not locate selection in file.");
+      return;
+    }
+    await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "remove-underline");
+    new import_obsidian5.Notice("Underline removed.");
+    this.restoreScroll(view, scrollPos);
+    sel == null ? void 0 : sel.removeAllRanges();
+  }
   // Remove all highlights from file
   async removeAllHighlights(view) {
     await this.saveUndoState(view.file);
     let raw = await this.app.vault.read(view.file);
     raw = raw.replace(/==(.*?)==/g, "$1");
     raw = raw.replace(/<mark[^>]*>(.*?)<\/mark>/g, "$1");
+    raw = raw.replace(/<u>(.*?)<\/u>/g, "$1");
     await this.app.vault.modify(view.file, raw);
-    new import_obsidian5.Notice("All highlights removed.");
+    new import_obsidian5.Notice("All annotations removed.");
   }
   // Export highlights to new MD file
   async exportHighlights(view) {
@@ -1579,13 +1683,13 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
     while (expanded) {
       expanded = false;
       const preceding = raw.substring(0, expandedStart);
-      const matchBack = preceding.match(/(<mark[^>]*>|\*\*|==|~~|\*|_|\[\[|\[)$/);
+      const matchBack = preceding.match(/(<mark[^>]*>|<u>|\*\*|==|~~|\*|_|\[\[|\[)$/);
       if (matchBack) {
         expandedStart -= matchBack[0].length;
         expanded = true;
       }
       const following = raw.substring(expandedEnd);
-      const matchForward = following.match(/^(<\/mark>|\*\*|==|~~|\*|_|\]\]|\]\([^)]+\))/);
+      const matchForward = following.match(/^(<\/mark>|<\/u>|\*\*|==|~~|\*|_|\]\]|\]\([^)]+\))/);
       if (matchForward) {
         expandedEnd += matchForward[0].length;
         expanded = true;
@@ -1622,6 +1726,10 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
         let cleanLine = line.replace(/<mark[^>]*>/g, "").replace(/<\/mark>/g, "");
         if (mode === "highlight" || mode === "color" || mode === "tag") {
           cleanLine = cleanLine.split("==").join("");
+        } else if (mode === "underline") {
+          cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+        } else if (mode === "remove-underline") {
+          cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
         } else if (mode === "bold") {
           cleanLine = cleanLine.split("**").join("");
         } else if (mode === "italic") {
@@ -1629,7 +1737,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
         } else if (mode === "remove") {
           cleanLine = cleanLine.split("==").join("");
         }
-        if (mode === "remove") {
+        if (mode === "remove" || mode === "remove-underline") {
           return cleanLine;
         }
         const matchIndent = cleanLine.match(/^(\s*)/);
@@ -1653,6 +1761,8 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
           }
         } else if (mode === "color") {
           wrappedContent = `<mark style="background: ${payload}; color: black;">${content}</mark>`;
+        } else if (mode === "underline") {
+          wrappedContent = `<u>${content}</u>`;
         }
         return `${indent}${prefix}${tagStr}${wrappedContent}`;
       });
