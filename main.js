@@ -35,7 +35,7 @@ async function exportHighlightsToMD(app, file) {
   const highlights = [];
   const markdownPattern = /==(.*?)==/gs;
   const htmlPattern = /<mark[^>]*>(.*?)<\/mark>/gs;
-  const underlinePattern = /<u>(.*?)<\/u>/gs;
+  const underlinePattern = /<u[^>]*>(.*?)<\/u>/gs;
   let match;
   while ((match = markdownPattern.exec(raw)) !== null) {
     highlights.push({
@@ -116,8 +116,8 @@ function getHighlightsFromContent(raw) {
       color
     });
   }
-  const underlinePattern = /<u>(.*?)<\/u>/gs;
-  while ((match = underlinePattern.exec(raw)) !== null) {
+  const underlinePattern2 = /<u[^>]*>(.*?)<\/u>/gs;
+  while ((match = underlinePattern2.exec(raw)) !== null) {
     const lineStart = raw.lastIndexOf("\n", match.index) + 1;
     const lineEnd = raw.indexOf("\n", match.index + match[0].length);
     const context = raw.substring(lineStart, lineEnd === -1 ? void 0 : lineEnd).trim();
@@ -1066,6 +1066,7 @@ var DEFAULT_SETTINGS = {
   showRemoveButton: true,
   showQuoteButton: true,
   showUnderlineButton: true,
+  underlineColor: "#e53935",
   // NEW: Color Palette (optional, disabled by default = use == highlight)
   enableColorPalette: false,
   colorPalette: [
@@ -1591,7 +1592,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
     let raw = await this.app.vault.read(view.file);
     raw = raw.replace(/==(.*?)==/g, "$1");
     raw = raw.replace(/<mark[^>]*>(.*?)<\/mark>/g, "$1");
-    raw = raw.replace(/<u>(.*?)<\/u>/g, "$1");
+    raw = raw.replace(/<u[^>]*>(.*?)<\/u>/g, "$1");
     await this.app.vault.modify(view.file, raw);
     new import_obsidian5.Notice("All annotations removed.");
   }
@@ -1683,7 +1684,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
     while (expanded) {
       expanded = false;
       const preceding = raw.substring(0, expandedStart);
-      const matchBack = preceding.match(/(<mark[^>]*>|<u>|\*\*|==|~~|\*|_|\[\[|\[)$/);
+      const matchBack = preceding.match(/(<mark[^>]*>|<u[^>]*>|\*\*|==|~~|\*|_|\[\[|\[)$/);
       if (matchBack) {
         expandedStart -= matchBack[0].length;
         expanded = true;
@@ -1727,9 +1728,9 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
         if (mode === "highlight" || mode === "color" || mode === "tag") {
           cleanLine = cleanLine.split("==").join("");
         } else if (mode === "underline") {
-          cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+          cleanLine = line.replace(/<u[^>]*>/g, "").replace(/<\/u>/g, "");
         } else if (mode === "remove-underline") {
-          cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+          cleanLine = line.replace(/<u[^>]*>/g, "").replace(/<\/u>/g, "");
         } else if (mode === "bold") {
           cleanLine = cleanLine.split("**").join("");
         } else if (mode === "italic") {
@@ -1762,7 +1763,8 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
         } else if (mode === "color") {
           wrappedContent = `<mark style="background: ${payload}; color: black;">${content}</mark>`;
         } else if (mode === "underline") {
-          wrappedContent = `<u>${content}</u>`;
+          const color = this.settings.underlineColor || "#e53935";
+          wrappedContent = `<u style="text-decoration-color: ${color}; text-decoration-thickness: 2px;">${content}</u>`;
         }
         return `${indent}${prefix}${tagStr}${wrappedContent}`;
       });
@@ -1865,6 +1867,15 @@ var ReadingHighlighterSettingTab = class extends import_obsidian5.PluginSettingT
     }));
     new import_obsidian5.Setting(containerEl).setName("Show Remove Button").addToggle((toggle) => toggle.setValue(this.plugin.settings.showRemoveButton).onChange(async (value) => {
       this.plugin.settings.showRemoveButton = value;
+      await this.plugin.saveSettings();
+    }));
+    containerEl.createEl("h3", { text: "Underline" });
+    new import_obsidian5.Setting(containerEl).setName("Show Underline Button").addToggle((toggle) => toggle.setValue(this.plugin.settings.showUnderlineButton).onChange(async (value) => {
+      this.plugin.settings.showUnderlineButton = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian5.Setting(containerEl).setName("Underline Color").setDesc("Color for underline decoration (default: red).").addColorPicker((color) => color.setValue(this.plugin.settings.underlineColor || "#e53935").onChange(async (value) => {
+      this.plugin.settings.underlineColor = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Mobile & UX" });

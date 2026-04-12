@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
     showRemoveButton: true,
     showQuoteButton: true,
     showUnderlineButton: true,
+    underlineColor: "#e53935",
 
     // NEW: Color Palette (optional, disabled by default = use == highlight)
     enableColorPalette: false,
@@ -660,8 +661,8 @@ export default class ReadingHighlighterPlugin extends Plugin {
         // Remove HTML highlights
         raw = raw.replace(/<mark[^>]*>(.*?)<\/mark>/g, "$1");
 
-        // Remove underlines
-        raw = raw.replace(/<u>(.*?)<\/u>/g, "$1");
+        // Remove underlines (plain + styled)
+        raw = raw.replace(/<u[^>]*>(.*?)<\/u>/g, "$1");
 
         await this.app.vault.modify(view.file, raw);
         new Notice("All annotations removed.");
@@ -784,7 +785,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
             expanded = false;
 
             const preceding = raw.substring(0, expandedStart);
-            const matchBack = preceding.match(/(<mark[^>]*>|<u>|\*\*|==|~~|\*|_|\[\[|\[)$/);
+            const matchBack = preceding.match(/(<mark[^>]*>|<u[^>]*>|\*\*|==|~~|\*|_|\[\[|\[)$/);
 
             if (matchBack) {
                 expandedStart -= matchBack[0].length;
@@ -841,9 +842,9 @@ export default class ReadingHighlighterPlugin extends Plugin {
                     cleanLine = cleanLine.split('==').join('');
                 } else if (mode === "underline") {
                     // Strip existing underline tags only, preserve highlights
-                    cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+                    cleanLine = line.replace(/<u[^>]*>/g, "").replace(/<\/u>/g, "");
                 } else if (mode === "remove-underline") {
-                    cleanLine = line.replace(/<u>/g, "").replace(/<\/u>/g, "");
+                    cleanLine = line.replace(/<u[^>]*>/g, "").replace(/<\/u>/g, "");
                 } else if (mode === "bold") {
                     cleanLine = cleanLine.split('**').join('');
                 } else if (mode === "italic") {
@@ -883,7 +884,8 @@ export default class ReadingHighlighterPlugin extends Plugin {
                 } else if (mode === "color") {
                     wrappedContent = `<mark style="background: ${payload}; color: black;">${content}</mark>`;
                 } else if (mode === "underline") {
-                    wrappedContent = `<u>${content}</u>`;
+                    const color = this.settings.underlineColor || "#e53935";
+                    wrappedContent = `<u style="text-decoration-color: ${color}; text-decoration-thickness: 2px;">${content}</u>`;
                 }
 
                 return `${indent}${prefix}${tagStr}${wrappedContent}`;
@@ -1102,6 +1104,28 @@ class ReadingHighlighterSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showRemoveButton)
                 .onChange(async (value) => {
                     this.plugin.settings.showRemoveButton = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // === Underline ===
+        containerEl.createEl("h3", { text: "Underline" });
+
+        new Setting(containerEl)
+            .setName("Show Underline Button")
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showUnderlineButton)
+                .onChange(async (value) => {
+                    this.plugin.settings.showUnderlineButton = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Underline Color")
+            .setDesc("Color for underline decoration (default: red).")
+            .addColorPicker(color => color
+                .setValue(this.plugin.settings.underlineColor || "#e53935")
+                .onChange(async (value) => {
+                    this.plugin.settings.underlineColor = value;
                     await this.plugin.saveSettings();
                 }));
 
