@@ -582,7 +582,7 @@ export default class ReadingHighlighterPlugin extends Plugin {
 
         await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "remove");
 
-        new Notice("Highlighting removed.");
+        new Notice("Annotation removed.");
         this.restoreScroll(view, scrollPos);
         sel?.removeAllRanges();
     }
@@ -850,7 +850,11 @@ export default class ReadingHighlighterPlugin extends Plugin {
                 } else if (mode === "italic") {
                     cleanLine = cleanLine.split('*').join('');
                 } else if (mode === "remove") {
-                    cleanLine = cleanLine.split('==').join('');
+                    // Universal remove: strip all annotation markers (==, <mark>, <u>)
+                    cleanLine = cleanLine
+                        .split('==').join('')
+                        .replace(/<u[^>]*>/g, '')
+                        .replace(/<\/u>/g, '');
                 }
 
                 if (mode === "remove" || mode === "remove-underline") {

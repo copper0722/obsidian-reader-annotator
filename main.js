@@ -1532,7 +1532,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
       return;
     }
     await this.applyMarkdownModification(view.file, result.raw, result.start, result.end, "remove");
-    new import_obsidian5.Notice("Highlighting removed.");
+    new import_obsidian5.Notice("Annotation removed.");
     this.restoreScroll(view, scrollPos);
     sel == null ? void 0 : sel.removeAllRanges();
   }
@@ -1736,7 +1736,7 @@ var ReadingHighlighterPlugin = class extends import_obsidian5.Plugin {
         } else if (mode === "italic") {
           cleanLine = cleanLine.split("*").join("");
         } else if (mode === "remove") {
-          cleanLine = cleanLine.split("==").join("");
+          cleanLine = cleanLine.split("==").join("").replace(/<u[^>]*>/g, "").replace(/<\/u>/g, "");
         }
         if (mode === "remove" || mode === "remove-underline") {
           return cleanLine;
