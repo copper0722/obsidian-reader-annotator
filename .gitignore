@@ -1,3 +1,9 @@
+# macOS / Python local artifacts
+.DS_Store
+__pycache__/
+*.pyc
+*.bak-*
+
 # Logs
 logs
 *.log
